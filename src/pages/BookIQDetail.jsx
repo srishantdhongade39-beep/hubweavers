@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+
 const BOOK_DATA = {
   'intelligent-investor': { title: 'The Intelligent Investor', author: 'Benjamin Graham' },
   'rich-dad-poor-dad': { title: 'Rich Dad Poor Dad', author: 'Robert Kiyosaki' },
@@ -12,14 +13,14 @@ const CHAPTERS = [
   {
     num: 1,
     title: 'No One\'s Crazy',
-    status: 'completed',
+    status: 'unread',
     body: 'Your personal experiences with money make up maybe 0.00000001% of what\'s happened in the world, but maybe 80% of how you think the world works. Rohan, a 45-year-old from Indore who lived through the 1992 Harshad Mehta scam, will forever be wary of the stock market. His 22-year-old nephew, who only knows bull markets, thinks investing is easy. Both are rational, given their experiences.',
     takeaway: 'No one is crazy. People make financial decisions based on their own life experiences — not textbooks. Understand this before judging anyone\'s money choices.'
   },
   {
     num: 2,
     title: 'Luck & Risk',
-    status: 'completed',
+    status: 'unread',
     body: 'Nothing is as good or as bad as it seems. Bill Gates went to one of the only high schools in the world with a computer in 1968. His classmate Kent Evans, equally talented, died in a mountaineering accident before seeing his potential. Luck and risk are siblings. When studying success or failure, be careful about what to attribute to individual decisions versus forces beyond anyone\'s control.',
     takeaway: 'The same skills that drive success also drive failure. Judge financial decisions by their quality, not their outcomes — because luck and risk both play a massive, invisible role.'
   },
@@ -33,7 +34,7 @@ export default function BookIQDetail() {
   const [ch3Complete, setCh3Complete] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => setProgressWidth(35), 200);
+    setTimeout(() => setProgressWidth(0), 200);
   }, []);
 
   return (
@@ -50,15 +51,19 @@ export default function BookIQDetail() {
             <h1 className="text-4xl font-extrabold mb-1" style={{ color: '#1A1A2E' }}>{book.title}</h1>
             <p className="italic text-gray-500 mb-4">by {book.author}</p>
             <p className="text-gray-600 mb-6 leading-relaxed">"The most important quality for an investor is temperament, not intellect. A temperament that neither derives great pleasure from being with the crowd nor against it."</p>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-sm" style={{ color: '#1A1A2E' }}>Reading Progress</span>
-                <span className="font-bold text-sm" style={{ color: '#0D6B5B' }}>35% Complete</span>
+            
+            {/* Reading Progress Component */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 animate-fade-in" style={{ animationDelay: '100ms', animationFillMode: 'both' }}>
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-500 font-semibold text-sm">Reading Progress</span>
+                  <span className="font-bold text-sm" style={{ color: '#0D6B5B' }}>0% Complete</span>
+                </div>
+                <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${progressWidth}%`, backgroundColor: '#0D6B5B' }}></div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">0 of 20 chapters mastered</p>
               </div>
-              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${progressWidth}%`, backgroundColor: '#1D9E75' }} />
-              </div>
-              <p className="text-xs text-gray-400 mt-2">7 of 20 chapters mastered</p>
             </div>
           </div>
         </div>
@@ -70,8 +75,8 @@ export default function BookIQDetail() {
             {CHAPTERS.map(ch => (
               <div key={ch.num} className="bg-white rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#0D6B5B' }}>Chapter {ch.num}</span>
-                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#1D9E75' }}>✓ Completed</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-[#0D6B5B]">Chapter {ch.num}</span>
+                  {/* Hardcoded Completed badge removed, no badge shown */}
                 </div>
                 <h2 className="text-xl font-bold mb-3" style={{ color: '#1A1A2E' }}>"{ch.title}"</h2>
                 <p className="text-gray-600 text-sm leading-relaxed mb-4">{ch.body}</p>
