@@ -1,25 +1,24 @@
 const getApiKey = () => import.meta.env.VITE_GROQ_API_KEY;
 
-export const generateMentorResponse = async (userMessage, contextData = {}) => {
+export const generateMentorResponse = async (userMessage, contextData = {}, onChunk = null) => {
   const apiKey = getApiKey();
   if (!apiKey) return "Error: Groq API Key is missing. Please set VITE_GROQ_API_KEY in your .env file.";
 
-  const systemInstruction = `You are the **SimZone AI Mentor**, an expert financial advisor and trading coach integrated directly into a learning trading terminal.
-Your goal is to guide students through paper trading, explain complex financial concepts simply, and evaluate their virtual trades.
-Rules:
-1. Always be encouraging but realistic about market risks.
-2. If the user makes a TRADE (BUY/SELL), explain the potential risks/rewards based on the current market data provided.
-3. Keep responses concise, easily scannable, and formatted cleanly. Do not use overly long paragraphs. Use emojis where appropriate.
-4. You only have access to the context provided in each prompt.`;
+  const systemInstruction = `You are SimZone Mentor, a beginner-friendly Indian stock market trading coach. Always use the real data provided. Never give generic advice. Always explain WHY in simple language. Use ₹ for all prices. Keep responses under 5 sentences. Use a warm, encouraging tone.`;
 
   const promptText = `
 Context Data:
 User Portfolio Value: ${contextData.portfolioValue || 'Unknown'}
 Available Balance: ${contextData.virtualBalance || 'Unknown'}
-Active Instrument: ${contextData.instrument || 'Unknown'} at ${contextData.price || 'Unknown'}
-Action Taken/Question: ${userMessage}
+Active Instrument: ${contextData.instrument || 'Unknown'}
+Current Price: ${contextData.price || 'Unknown'}
+Day High: ${contextData.dayHigh || 'Unknown'}
+Day Low: ${contextData.dayLow || 'Unknown'}
+Percent Change Today: ${contextData.percentChange || 'Unknown'}
+Recent Trade History: ${contextData.tradeHistory ? JSON.stringify(contextData.tradeHistory) : 'None'}
+Positions Held: ${contextData.positions ? JSON.stringify(contextData.positions) : 'None'}
 
-Please respond as the SimZone AI Mentor.
+Action Taken/Question: ${userMessage}
 `;
 
   try {
@@ -30,13 +29,14 @@ Please respond as the SimZone AI Mentor.
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", // Use active Meta LLaMA 3.3 model
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemInstruction },
           { role: "user", content: promptText }
         ],
         temperature: 0.7,
-        max_tokens: 1024
+        max_tokens: 1024,
+        stream: !!onChunk // Use streaming if callback is provided
       })
     });
 
@@ -46,11 +46,46 @@ Please respond as the SimZone AI Mentor.
         throw new Error(`HTTP ${response.status}: ${errText}`);
     }
 
-    const data = await response.json();
-    if (data.choices && data.choices.length > 0) {
-      return data.choices[0].message.content;
+    if (onChunk) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let fullContent = "";
+      let buffer = "";
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // Keep the last partial line
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine === "data: [DONE]") return fullContent;
+          if (trimmedLine.startsWith("data: ")) {
+            try {
+              const parsed = JSON.parse(trimmedLine.slice(6));
+              const content = parsed.choices?.[0]?.delta?.content;
+              // If content exists, append it. (Even if empty string, we should ignore, but if it has characters we append it)
+              if (content) {
+                fullContent += content;
+                onChunk(fullContent);
+              }
+            } catch (e) {
+              console.error("Failed to parse SSE JSON:", e);
+            }
+          }
+        }
+      }
+      return fullContent;
     } else {
-      throw new Error("No candidates returned from Groq.");
+      const data = await response.json();
+      if (data.choices && data.choices.length > 0) {
+        return data.choices[0].message.content;
+      } else {
+        throw new Error("No candidates returned from Groq.");
+      }
     }
   } catch (error) {
     console.error("Groq API Error:", error);

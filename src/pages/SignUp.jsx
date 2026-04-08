@@ -115,7 +115,7 @@ export default function SignUp() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#1DB88E] focus:border-transparent transition-shadow outline-none"
-                placeholder="John Doe"
+                placeholder="Enter your full name"
               />
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function SignUp() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#1DB88E] focus:border-transparent transition-shadow outline-none"
-                placeholder="you@example.com"
+                placeholder="Enter your email"
               />
             </div>
           </div>
@@ -149,7 +149,7 @@ export default function SignUp() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#1DB88E] focus:border-transparent transition-shadow outline-none"
-                placeholder="••••••••"
+                placeholder="Create a password"
               />
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function SignUp() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#1DB88E] focus:border-transparent transition-shadow outline-none"
-                placeholder="••••••••"
+                placeholder="Confirm your password"
               />
             </div>
           </div>

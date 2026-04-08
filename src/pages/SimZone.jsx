@@ -18,8 +18,12 @@ import {
   AlertCircle,
   Plus,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Bot,
+  MessageSquare,
+  ChevronDown
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { generateMentorResponse } from '../config/groq';
 import { createChart } from 'lightweight-charts';
@@ -87,6 +91,7 @@ export default function SimZone() {
   // ── Watchlist state ──
   const [watchlistKeys, setWatchlistKeys] = useState(['hdfcBank', 'reliance', 'tataMotors', 'goldETF']);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [watchlistPrices, setWatchlistPrices] = useState({});
 
   // ── Toast state ──
   const [toast, setToast] = useState(null); // { message, type: 'success'|'sell'|'error' }
@@ -97,19 +102,50 @@ export default function SimZone() {
   const portfolio = state.portfolio;
   const instrumentInfo = INSTRUMENT_MAP[activeInstrument];
 
+  // ── Watchlist Prices Polling ──
+  useEffect(() => {
+    const updatePrices = () => {
+      setWatchlistPrices(prev => {
+        const nextPrices = { ...prev };
+        watchlistKeys.forEach(key => {
+          const price = state.prices[key] || 0;
+          const changePct = ((Math.random() - 0.5) * 2).toFixed(2);
+          nextPrices[key] = {
+            price,
+            changePct,
+            isUp: parseFloat(changePct) >= 0
+          };
+        });
+        return nextPrices;
+      });
+    };
+    updatePrices();
+    const intervalId = setInterval(updatePrices, 15000);
+    return () => clearInterval(intervalId);
+  }, [watchlistKeys, state.prices]);
+
   // ── Mentor state ──
+  const navigate = useNavigate();
   const [mentorState, setMentorState] = useState(() => localStorage.getItem('simzone_mentor_state') || 'open');
-  const [mentorMessages, setMentorMessages] = useState([
-    { role: 'ai', text: 'Namaste! I see you have ₹1,00,000 ready. Look at the chart and let me know if you need help, or just place a trade and I will evaluate it!' }
-  ]);
+  const [mentorMessages, setMentorMessages] = useState([]);
   const [isMentorTyping, setIsMentorTyping] = useState(false);
   const [mentorInput, setMentorInput] = useState('');
   const chatScrollRef = useRef(null);
   const chartContainerRef = useRef(null);
   const chartSeriesRef = useRef(null);
+  const mentorInitializedRef = useRef(false);
 
   // ── Persist mentor state ──
   useEffect(() => { localStorage.setItem('simzone_mentor_state', mentorState); }, [mentorState]);
+
+  // ── Mentor Initial Greeting ──
+  useEffect(() => {
+    if (!mentorInitializedRef.current && instrumentInfo && currentPrice > 0) {
+      mentorInitializedRef.current = true;
+      const initialPrompt = `(INTERNAL COMMAND) The user just loaded the page. You must output exactly in this format but naturally: "Namaste! You have ₹[virtualBalance] ready to trade. You're currently looking at [STOCK] which is trading at ₹[currentPrice]. This stock has moved [X]% today. Want me to explain what that means before you place your first trade?" Replace the brackets with actual context data provided.`;
+      askMentor(initialPrompt, null, true);
+    }
+  }, [instrumentInfo, currentPrice]);
 
   // ── Auto-scroll mentor ──
   useEffect(() => {
@@ -171,6 +207,8 @@ export default function SimZone() {
 
   const renderFormattedText = (text, role) => {
     if (role === 'user') return text;
+    if (!text) return null; // Safe guard for empty strings during stream init
+    
     return text.split('\n').map((line, i) => {
       if (!line.trim()) return <div key={i} className="h-1.5" />;
       const parts = line.split(/(\*\*.*?\*\*)/g);
@@ -187,20 +225,38 @@ export default function SimZone() {
   };
 
   // ── AI Mentor ──
-  const askMentor = async (query, visibleQuery = null) => {
+  const askMentor = async (query, visibleQuery = null, skipUserRender = false) => {
     if (!query.trim()) return;
-    setMentorMessages(prev => [...prev, { role: 'user', text: visibleQuery || query }]);
+    if (!skipUserRender) {
+      setMentorMessages(prev => [...prev, { role: 'user', text: visibleQuery || query }]);
+    }
     setMentorInput('');
     setIsMentorTyping(true);
     setMentorState('open');
+
+    const isUp = watchlistPrices[activeInstrument]?.isUp;
     const ctxData = {
       portfolioValue: formatMoney(portfolio.currentValue),
       virtualBalance: formatMoney(portfolio.virtualBalance),
       instrument: instrumentInfo?.name,
-      price: formatMoney(currentPrice)
+      price: formatMoney(currentPrice),
+      dayHigh: formatMoney(currentPrice * 1.012),
+      dayLow: formatMoney(currentPrice * 0.988),
+      percentChange: `${isUp ? '+' : ''}${watchlistPrices[activeInstrument]?.changePct || '0.00'}%`,
+      tradeHistory: (portfolio.trades || []).slice(0, 5),
+      positions: portfolio.positions || {}
     };
-    const response = await generateMentorResponse(query, ctxData);
-    setMentorMessages(prev => [...prev, { role: 'ai', text: response }]);
+
+    setMentorMessages(prev => [...prev, { role: 'ai', text: '' }]);
+
+    await generateMentorResponse(query, ctxData, (chunk) => {
+      setMentorMessages(prev => {
+        const newArr = [...prev];
+        newArr[newArr.length - 1] = { role: 'ai', text: chunk };
+        return newArr;
+      });
+    });
+    
     setIsMentorTyping(false);
   };
 
@@ -212,7 +268,9 @@ export default function SimZone() {
     }
     placeTrade(activeInstrument, 'BUY', 1);
     showToast(`Bought 1 share of ${instrumentInfo?.name} at ${formatMoney(currentPrice)}`, 'success');
-    askMentor(`I just bought 1 unit of ${instrumentInfo?.name} at ${formatMoney(currentPrice)}. What do you think about this trade?`);
+    
+    const prompt = `(INTERNAL COMMAND) The user just clicked BUY. Respond in exactly this structure: "Good move! You just bought 1 share of [STOCK] at ₹[price]. This means ₹[price] has been deducted from your balance. You now have ₹[newBalance] left. To make a profit, [STOCK] needs to go above ₹[price]. Watch the candles — if you see more green candles forming, the price might keep rising." Fill in actual data.`;
+    askMentor(prompt, "I just placed a BUY order.", true);
   };
 
   const handleSell = () => {
@@ -221,9 +279,20 @@ export default function SimZone() {
       showToast("You don't own any shares of this stock!", 'error');
       return;
     }
+    const buyPrice = pos.avgPrice;
+    const pnl = currentPrice - buyPrice;
+    const isProfit = pnl >= 0;
+
     placeTrade(activeInstrument, 'SELL', 1);
     showToast(`Sold 1 share of ${instrumentInfo?.name} at ${formatMoney(currentPrice)}`, 'sell');
-    askMentor(`I just sold 1 unit of ${instrumentInfo?.name} at ${formatMoney(currentPrice)}. What do you think about this trade?`);
+    
+    let prompt = "";
+    if (isProfit) {
+        prompt = `(INTERNAL COMMAND) The user just clicked SELL with a profit. Respond exactly like: "Nice trade! You sold [STOCK] at ₹[sellPrice] which you bought at ₹[buyPrice]. You made a profit of ₹[pnl] on this trade. That's a [X]% return. This happened because the price moved up after you bought. This is called a long trade — buy low, sell high." Fill actual data.`;
+    } else {
+        prompt = `(INTERNAL COMMAND) The user just clicked SELL with a loss. Respond exactly like: "You sold [STOCK] at ₹[sellPrice] but you bought it at ₹[buyPrice]. That's a loss of ₹[pnl]. Don't worry — losses are part of learning. In real trading, this is called a stop-loss situation. Notice how the red candles were forming before the price dropped? That's a signal to watch for next time." Fill actual data.`;
+    }
+    askMentor(prompt, "I just placed a SELL order.", true);
   };
 
   const handleMentorSubmit = (e) => { e.preventDefault(); askMentor(mentorInput); };
@@ -334,9 +403,8 @@ export default function SimZone() {
         {watchlistKeys.map(key => {
           const info = INSTRUMENT_MAP[key];
           if (!info) return null;
-          const price = state.prices[key] || 0;
-          const changePct = ((price - (price / (1 + (Math.random() - 0.5) * 0.01))) / price * 100).toFixed(2);
-          const isUp = parseFloat(changePct) >= 0;
+          const wp = watchlistPrices[key] || { price: state.prices[key] || 0, changePct: '0.00', isUp: true };
+          const { price, changePct, isUp } = wp;
           return (
             <button key={key} onClick={() => { setActiveInstrument(key); setActiveSidebarTab('dashboard'); }}
               className={`text-left p-3 rounded-xl border transition-all hover:scale-[1.02] ${activeInstrument === key ? 'border-green-500 bg-green-500/10' : 'border-gray-700 bg-gray-800/60 hover:border-gray-600'}`}>
@@ -587,9 +655,14 @@ export default function SimZone() {
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* ── LEFT SIDEBAR ── */}
-        <div className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col justify-between shrink-0">
+        <div className="hidden lg:flex w-[220px] min-w-[220px] bg-white border-r border-slate-200 flex-col justify-between shrink-0 h-screen overflow-y-auto">
           <div>
             <div className="p-6 pb-2">
+              <button 
+                onClick={() => navigate('/')} 
+                className="mb-4 flex items-center space-x-1 text-xs font-semibold text-slate-400 hover:text-green-600 hover:underline transition-all">
+                <span>←</span> <span>Back to FinIQ</span>
+              </button>
               <h2 className="font-bold text-lg leading-tight">SimZone Terminal</h2>
               <p className="text-sm text-slate-500 font-medium mt-1">Learning Mode</p>
             </div>
@@ -606,25 +679,43 @@ export default function SimZone() {
             </nav>
           </div>
 
-          {/* Virtual Balance Card */}
-          <div className="p-4">
-            <div className="rounded-2xl p-5 w-full text-white relative overflow-hidden shadow-lg" style={{ background: 'linear-gradient(135deg, #0f766e 0%, #065f46 50%, #14532d 100%)' }}>
-              <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-400/20 rounded-full blur-3xl -mr-8 -mt-8 pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-20 h-20 bg-teal-300/15 rounded-full blur-2xl -ml-6 -mb-6 pointer-events-none" />
-              <div className="flex items-center space-x-2 mb-3 relative z-10">
-                <div className="w-7 h-7 rounded-lg bg-white/15 backdrop-blur-sm flex items-center justify-center">
-                  <Building2 className="w-4 h-4 text-emerald-200" />
+          <div className="p-4 mt-auto space-y-4 mb-16">
+            {/* SimZone Mentor Floating Button (MiniState) */}
+            <div className="group relative">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setMentorState(mentorState === 'open' ? 'closed' : 'open'); }}
+                className={`w-[56px] h-[56px] rounded-full bg-[#14532d] text-white flex items-center justify-center shadow-xl transition-all duration-300 transform hover:scale-[1.05] active:scale-95 animate-pulse-green border-4 border-white`}
+              >
+                <Bot className="w-7 h-7" />
+              </button>
+              
+              {/* Tooltip */}
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50">
+                <div className="bg-slate-900 shadow-2xl text-white text-[11px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap">
+                  SimZone Mentor
+                  <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-slate-900" />
                 </div>
-                <span className="text-xs font-bold tracking-widest uppercase text-emerald-200/90">Virtual Balance</span>
               </div>
-              <div className="text-3xl font-black text-white tracking-tight mb-1 relative z-10 drop-shadow-sm">
-                {formatMoney(portfolio.virtualBalance)}
-              </div>
-              <div className={`text-sm font-semibold flex items-center relative z-10 mt-2 ${portfolio?.todayPnL >= 0 ? 'text-emerald-200' : 'text-red-300'}`}>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${portfolio?.todayPnL >= 0 ? 'bg-emerald-400/20' : 'bg-red-400/20'}`}>
-                  {portfolio?.todayPnL >= 0 ? '▲' : '▼'} {portfolio?.todayPnL >= 0 ? '+' : ''}{formatMoney(portfolio?.todayPnL || 0)}
-                </span>
-                <span className="text-white/50 font-normal ml-2 text-xs tracking-wide">Today's P&L</span>
+            </div>
+
+            {/* Virtual Balance Card */}
+            <div className="w-full transform transition-all duration-300">
+              <div className="rounded-2xl p-4 text-white relative overflow-hidden shadow-lg border border-emerald-800/20" style={{ background: 'linear-gradient(135deg, #065f46 0%, #14532d 100%)' }}>
+                <div className="flex items-center space-x-2 mb-2 relative z-10">
+                  <div className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center shrink-0">
+                    <Building2 className="w-3 h-3 text-emerald-200" />
+                  </div>
+                  <span className="text-[9px] font-bold tracking-widest uppercase text-emerald-200/80 leading-tight">Virtual Balance</span>
+                </div>
+                
+                <div className="text-xl font-black text-white tracking-tight mb-1 relative z-10 truncate" title={formatMoney(portfolio.virtualBalance)}>
+                  {formatMoney(portfolio.virtualBalance)}
+                </div>
+                
+                <div className={`text-[11px] font-bold flex items-center relative z-10 ${portfolio?.todayPnL >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  <span>{portfolio?.todayPnL >= 0 ? '▲' : '▼'} {portfolio?.todayPnL >= 0 ? '+' : ''}{formatMoney(portfolio?.todayPnL || 0)}</span>
+                  <span className="ml-1.5 opacity-60 font-medium">Today's P&L</span>
+                </div>
               </div>
             </div>
           </div>
@@ -662,31 +753,30 @@ export default function SimZone() {
         </div>
 
         {/* ── RIGHT PANEL ── */}
-        <div className="hidden md:flex w-80 bg-white flex-col shrink-0 overflow-y-auto">
+        <div className="hidden lg:flex w-[320px] min-w-[320px] bg-white flex-col shrink-0 overflow-y-auto h-screen border-l border-slate-200 pb-20">
 
           {/* Watchlist Section */}
           <div className="p-5 border-b border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-slate-900">Watchlist</h3>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
               {watchlistKeys.map(key => {
                 const info = INSTRUMENT_MAP[key];
                 if (!info) return null;
-                const p = state.prices[key] || 0;
-                const change = (Math.random() * 0.5 + 0.1).toFixed(2);
-                const isUp = Math.random() > 0.5;
+                const wp = watchlistPrices[key] || { price: state.prices[key] || 0, changePct: '0.00', isUp: true };
+                const { price: p, changePct: change, isUp } = wp;
                 return (
                   <div key={key} onClick={() => setActiveInstrument(key)}
-                    className={`flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer border ${activeInstrument === key ? 'bg-green-50 border-green-200' : 'bg-slate-50 hover:bg-slate-100 border-slate-100'}`}>
-                    <div>
-                      <h4 className="font-bold text-sm tracking-tight">{info.name}</h4>
-                      <p className="text-xs text-slate-500 mt-0.5 font-medium">{info.ticker}</p>
+                    className={`flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer border shrink-0 h-[64px] ${activeInstrument === key ? 'bg-green-50 border-green-200' : 'bg-slate-50 hover:bg-slate-100 border-slate-100'}`}>
+                    <div className="flex-1 min-w-0 mr-3">
+                      <h4 className="font-bold text-sm tracking-tight truncate">{info.name}</h4>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium truncate">{info.ticker}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="font-bold text-sm text-slate-900">{formatMoney(p)}</p>
                       <p className={`text-xs font-semibold mt-0.5 ${isUp ? 'text-green-600' : 'text-red-600'}`}>
-                        {isUp ? '+' : '-'}{change}%
+                        {isUp ? '+' : ''}{change}%
                       </p>
                     </div>
                   </div>
@@ -696,69 +786,6 @@ export default function SimZone() {
           </div>
 
           <div className="p-4 space-y-4">
-
-            {/* SimZone Mentor Card */}
-            <div className={`bg-white rounded-xl shadow-lg shadow-black/5 border border-slate-200 overflow-hidden flex flex-col transition-all duration-300 ${
-              mentorState === 'closed' ? 'hidden' : mentorState === 'minimized' ? 'h-[46px] cursor-pointer' : 'h-[400px]'
-            }`} onClick={() => { if (mentorState === 'minimized') setMentorState('open'); }}>
-              <div className="bg-green-900 px-4 py-3 flex items-center justify-between shrink-0 h-[46px]">
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-sm text-green-50 tracking-wide uppercase">SimZone Mentor ✨</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  {mentorState === 'minimized' ? (
-                    <button className="text-green-300 hover:text-white transition-colors p-1"><ChevronUp className="w-4 h-4" /></button>
-                  ) : (
-                    <>
-                      <button onClick={(e) => { e.stopPropagation(); setMentorState('minimized'); }} className="text-green-300 hover:text-white transition-colors p-1"><Minus className="w-4 h-4" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); setMentorState('closed'); }} className="text-green-300 hover:text-white transition-colors p-1"><X className="w-4 h-4" /></button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className={`flex flex-col flex-1 overflow-hidden transition-opacity duration-300 ${mentorState === 'minimized' ? 'opacity-0' : 'opacity-100'}`}>
-                <div ref={chatScrollRef} className="flex-1 p-4 bg-white overflow-y-auto space-y-4 text-sm">
-                  {mentorMessages.map((msg, idx) => (
-                    <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`max-w-[90%] rounded-xl px-4 py-3 ${
-                        msg.role === 'user' ? 'bg-green-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-bl-none border border-slate-200'
-                      }`}>
-                        {renderFormattedText(msg.text, msg.role)}
-                      </div>
-                    </div>
-                  ))}
-                  {isMentorTyping && (
-                    <div className="flex items-start">
-                      <div className="bg-slate-100 text-slate-800 rounded-xl rounded-bl-none border border-slate-200 px-3 py-2 flex items-center space-x-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-green-600" />
-                        <span className="text-xs font-medium text-slate-500">Analyzing market...</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {mentorMessages.length === 1 && (
-                  <div className="px-4 pb-2 bg-white flex flex-wrap gap-2 shrink-0">
-                    <button onClick={(e) => { e.stopPropagation(); askMentor("What is RSI?"); }}
-                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-semibold rounded-full transition-colors border border-slate-200">
-                      What is RSI?
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); askMentor(`Is ${instrumentInfo?.ticker} a good buy right now?`); }}
-                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-semibold rounded-full transition-colors border border-slate-200">
-                      Is it a good time to buy?
-                    </button>
-                  </div>
-                )}
-                <form onSubmit={handleMentorSubmit} className="p-3 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                  <input type="text" value={mentorInput} onChange={(e) => setMentorInput(e.target.value)} disabled={isMentorTyping}
-                    placeholder="Ask me anything..."
-                    className="flex-1 bg-white border border-slate-200 rounded-full py-1.5 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-slate-100 disabled:text-slate-400" />
-                  <button type="submit" disabled={isMentorTyping || !mentorInput.trim()}
-                    className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-white shrink-0 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors">
-                    <Send className="w-4 h-4 ml-0.5" />
-                  </button>
-                </form>
-              </div>
-            </div>
 
             {/* Insight Card */}
             <div className="bg-[#f0fdf4] rounded-xl p-4 border border-green-100 shadow-sm">
@@ -817,16 +844,74 @@ export default function SimZone() {
             </div>
           </div>
         </div>
-
-        {/* ── FLOATING MENTOR REOPEN BUTTON ── */}
-        <button onClick={() => setMentorState('open')}
-          className={`absolute bottom-6 right-6 z-50 bg-[#14532d] text-white px-4 py-3 rounded-full shadow-2xl flex items-center space-x-2 transition-all duration-300 transform hover:scale-105 hover:bg-[#166534] ${
-            mentorState === 'closed' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'
-          }`}>
-          <Sparkles className="w-4 h-4" />
-          <span className="font-semibold text-sm tracking-wide">Mentor</span>
-        </button>
       </div>
+
+      {/* ── MENTOR POPUP (FLOATING) ── */}
+      {mentorState === 'open' && (
+        <div className="fixed bottom-6 left-[240px] z-[200] pointer-events-auto w-[340px] h-[420px] bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] border border-slate-200 flex flex-col overflow-hidden animate-slide-up">
+          <div className="bg-[#14532d] px-5 py-4 flex items-center justify-between shrink-0">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-7 h-7 bg-emerald-500/20 rounded-lg flex items-center justify-center border border-emerald-400/30">
+                <Sparkles className="w-4 h-4 text-emerald-300" />
+              </div>
+              <span className="font-bold text-[15px] text-white tracking-wide uppercase">SimZone Mentor ✨</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <button onClick={() => setMentorState('closed')} className="text-emerald-100/60 hover:text-white transition-colors p-2 rounded-xl hover:bg-white/10">
+                <Minus className="w-4 h-4" />
+              </button>
+              <button onClick={() => setMentorState('closed')} className="text-emerald-100/60 hover:text-white transition-colors p-2 rounded-xl hover:bg-white/10">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col flex-1 overflow-hidden bg-white">
+            <div ref={chatScrollRef} className="p-5 overflow-y-auto space-y-5 text-sm flex-1 scroll-smooth bg-gradient-to-b from-slate-50/50 to-white">
+              {mentorMessages.map((msg, idx) => (
+                <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
+                    msg.role === 'user' ? 'bg-[#22c55e] text-white font-semibold rounded-br-none' : 'bg-white text-slate-800 rounded-bl-none border border-slate-200'
+                  }`}>
+                    {renderFormattedText(msg.text, msg.role)}
+                  </div>
+                </div>
+              ))}
+              {isMentorTyping && (
+                <div className="flex items-start">
+                  <div className="bg-white text-slate-700 rounded-2xl rounded-bl-none border border-slate-200 px-5 py-3 flex items-center space-x-3 shadow-sm">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                    <span className="text-xs font-semibold text-slate-500">Thinking...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {mentorMessages.length > 0 && (
+              <div className="px-4 pb-3 bg-white flex flex-wrap gap-2 shrink-0">
+                <button onClick={() => askMentor("(INTERNAL COMMAND) What is RSI?", "What is RSI?", true)}
+                  className="px-3.5 py-1.5 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-full transition-all hover:scale-105 active:scale-95">
+                  What is RSI?
+                </button>
+                <button onClick={() => askMentor("(INTERNAL COMMAND) Is it a good time to buy?", "Is it a good time to buy?", true)}
+                  className="px-3.5 py-1.5 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-full transition-all hover:scale-105 active:scale-95">
+                  Is it a good time to buy?
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleMentorSubmit} className="p-4 bg-slate-50/80 border-t border-slate-100 flex items-center space-x-2">
+              <input type="text" value={mentorInput} onChange={(e) => setMentorInput(e.target.value)} disabled={isMentorTyping}
+                placeholder="Ask me anything..."
+                className="flex-1 bg-white border border-slate-200 rounded-xl py-2.5 px-5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:bg-slate-100 disabled:text-slate-400 shadow-inner" />
+              <button type="submit" disabled={isMentorTyping || !mentorInput.trim()}
+                className="w-10 h-10 rounded-xl bg-[#14532d] flex items-center justify-center text-white shrink-0 hover:bg-emerald-900 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-lg active:scale-95">
+                <Send className="w-5 h-5 ml-0.5" />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Toast animation keyframe (injected once) */}
       <style>{`

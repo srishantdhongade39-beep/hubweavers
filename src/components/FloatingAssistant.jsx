@@ -78,7 +78,7 @@ export default function FloatingAssistant() {
         {isOpen ? (
            <span className="text-2xl mt-0.5">✕</span>
         ) : (
-           <span className="font-extrabold text-lg tracking-wider">IQ</span>
+           <span className="text-2xl">🤖</span>
         )}
       </button>
 

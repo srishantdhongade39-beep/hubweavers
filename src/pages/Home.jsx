@@ -146,30 +146,56 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Problem Cards - Staggered */}
-      <section className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { icon: '📊', text: 'Only 27% of Indians are financially literate.', delay: '0ms' },
-            { icon: '📱', text: 'Finance education is fragmented — 100 YouTube channels, 0 structured path.', delay: '150ms' },
-            { icon: '🎯', text: "You can read all you want. Nobody gave you a safe space to practice.", delay: '300ms' },
-          ].map((card, i) => (
-            <div 
-              key={i} 
-              className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-default animate-slide-up-stagger"
-              style={{ animationDelay: card.delay, animationFillMode: 'both' }}
-            >
-              <div className="bg-[#EAF0EC] w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-6">
-                {card.icon}
-              </div>
-              <p className="text-[#0D2B1F] font-bold text-lg leading-relaxed">{card.text}</p>
+      {/* Live Stock Ticker Banner */}
+      <div className="w-full overflow-hidden" style={{ backgroundColor: '#0a0f0f', height: '36px' }}>
+        <div className="ticker-scroll flex items-center h-full whitespace-nowrap">
+          {[...Array(2)].map((_, loopIdx) => (
+            <div key={loopIdx} className="flex items-center shrink-0">
+              {[
+                { symbol: 'RELIANCE', price: '₹2,903.45', change: '+1.24%', up: true },
+                { symbol: 'HDFCBANK', price: '₹1,726.80', change: '-0.38%', up: false },
+                { symbol: 'TCS', price: '₹3,542.10', change: '+0.65%', up: true },
+                { symbol: 'INFY', price: '₹1,487.30', change: '+0.92%', up: true },
+                { symbol: 'TATAMOTORS', price: '₹890.55', change: '-1.12%', up: false },
+                { symbol: 'WIPRO', price: '₹462.15', change: '+0.34%', up: true },
+                { symbol: 'ICICIBANK', price: '₹1,198.70', change: '+0.78%', up: true },
+                { symbol: 'AXISBANK', price: '₹1,087.25', change: '-0.21%', up: false },
+                { symbol: 'BAJFINANCE', price: '₹6,823.90', change: '+1.56%', up: true },
+                { symbol: 'HINDUNILVR', price: '₹2,345.60', change: '-0.45%', up: false },
+                { symbol: 'SBIN', price: '₹812.40', change: '+0.88%', up: true },
+                { symbol: 'ADANIENT', price: '₹2,678.15', change: '+2.13%', up: true },
+                { symbol: 'MARUTI', price: '₹12,456.30', change: '-0.67%', up: false },
+                { symbol: 'LT', price: '₹3,412.85', change: '+0.41%', up: true },
+                { symbol: 'SUNPHARMA', price: '₹1,654.20', change: '+1.07%', up: true },
+              ].map((s, i) => (
+                <span key={i} className="flex items-center text-xs font-mono tracking-tight mx-4">
+                  <span className="text-white/90 font-semibold">{s.symbol}</span>
+                  <span className="text-white/60 ml-2">{s.price}</span>
+                  <span className={`ml-1.5 font-bold ${s.up ? 'text-green-400' : 'text-red-400'}`}>
+                    {s.up ? '▲' : '▼'} {s.change}
+                  </span>
+                  <span className="text-white/20 ml-4">•</span>
+                </span>
+              ))}
             </div>
           ))}
         </div>
-      </section>
+        <style>{`
+          .ticker-scroll {
+            animation: tickerMove 45s linear infinite;
+          }
+          .ticker-scroll:hover {
+            animation-play-state: paused;
+          }
+          @keyframes tickerMove {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+        `}</style>
+      </div>
 
       {/* Trust Bar */}
-      <section className="py-12 bg-[#0D2B1F] mt-12" ref={students.ref}>
+      <section className="py-12 bg-[#0D2B1F]" ref={students.ref}>
         <div className="max-w-5xl mx-auto px-6 flex flex-wrap items-center justify-center gap-12 md:gap-24">
           {[
             { num: students.count > 0 ? `${Math.floor(students.count / 1000)},${String(students.count % 1000).padStart(3, '0')}+` : '0', label: 'Registered Students' },
