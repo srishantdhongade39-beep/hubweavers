@@ -17,7 +17,17 @@ export default function ModuleCards() {
   const [activeCategory, setActiveCategory] = useState('All');
   const navigate = useNavigate();
 
-  const filteredModules = modules.filter(m => activeCategory === 'All' || m.category === activeCategory);
+  const getProgress = (id) => {
+    const p = localStorage.getItem(`finiq_module_${id}_progress`);
+    return p ? parseInt(p, 10) : 0;
+  };
+
+  const dynamicModules = modules.map(m => ({
+    ...m,
+    progress: getProgress(m.id)
+  }));
+
+  const filteredModules = dynamicModules.filter(m => activeCategory === 'All' || m.category === activeCategory);
 
   return (
     <div className="mb-8">
@@ -47,7 +57,10 @@ export default function ModuleCards() {
         {filteredModules.map(mod => (
           <div 
             key={mod.id} 
-            onClick={() => navigate('/learn/lesson')}
+            onClick={() => {
+              localStorage.setItem('finiq_active_module', JSON.stringify(mod));
+              navigate('/learn/lesson');
+            }}
             className="group cursor-pointer bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-xl transition-all hover:-translate-y-1"
           >
             <div className="flex justify-between items-start mb-3">
