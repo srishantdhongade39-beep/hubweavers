@@ -41,6 +41,15 @@ export function AuthProvider({ children }) {
               emailLessonReminders: true,
               marketVolatilityAlerts: true,
               communityMentions: false
+            },
+            sessionScore: 0,
+            portfolio: {
+              virtualBalance: 100000,
+              invested: 0,
+              currentValue: 0,
+              todayPnL: 0,
+              trades: [],
+              positions: {}
             }
           };
           await setDoc(userRef, data);

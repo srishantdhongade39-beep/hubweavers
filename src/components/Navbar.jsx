@@ -11,6 +11,7 @@ const tabs = [
   { name: 'BookIQ', path: '/bookiq', icon: '📖' },
   { name: 'Track', path: '/track', icon: '📊' },
   { name: 'Community', path: '/community', icon: '👥' },
+  { name: 'SimZone', path: '/simzone', icon: '📈' },
 ];
 
 export default function Navbar() {

@@ -4,6 +4,7 @@ import { AppProvider } from './context/AppContext';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
+import ErrorBoundary from './components/ErrorBoundary';
 import Home from './pages/Home';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
@@ -18,12 +19,15 @@ import Quiz from './pages/Quiz';
 import LevelComplete from './pages/LevelComplete';
 import Profile from './pages/Profile';
 import Community from './pages/Community';
+import SimZone from './pages/SimZone';
 import FloatingAssistant from './components/FloatingAssistant';
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const isSimZone = location.pathname === '/simzone';
+  
   return (
-    <div key={location.pathname} className="animate-fade-in">
+    <div key={location.pathname} className={isSimZone ? "" : "animate-fade-in"}>
       <Routes location={location}>
         <Route path="/" element={<Home />} />
         <Route path="/signin" element={<SignIn />} />
@@ -36,6 +40,7 @@ function AnimatedRoutes() {
         <Route path="/bookiq/:bookId" element={<BookIQDetail />} />
         <Route path="/quiz" element={<Quiz />} />
         <Route path="/level-complete" element={<LevelComplete />} />
+        <Route path="/simzone" element={<SimZone />} />
 
         {/* Protected Routes */}
         <Route path="/track" element={<ProtectedRoute><Track /></ProtectedRoute>} />
@@ -47,14 +52,27 @@ function AnimatedRoutes() {
   );
 }
 
+function AppContent() {
+  const location = useLocation();
+  const isSimZone = location.pathname === '/simzone';
+
+  return (
+    <>
+      {!isSimZone && <Navbar />}
+      <AnimatedRoutes />
+      {!isSimZone && <FloatingAssistant />}
+    </>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <AppProvider>
-          <Navbar />
-          <AnimatedRoutes />
-          <FloatingAssistant />
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
         </AppProvider>
       </AuthProvider>
     </BrowserRouter>

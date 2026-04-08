@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useAuth } from './AuthContext';
+import { db } from '../config/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 const AppContext = createContext();
 
@@ -21,25 +24,14 @@ const INSTRUMENT_MAP = {
 };
 
 const initialState = {
-  user: { name: 'Arjun Mehta', email: 'arjun.mehta@email.com', level: 2, streak: 4, iqPoints: 2150 },
+  user: { name: 'Arjun Mehta', email: 'arjun.mehta@email.com', level: 2, streak: 4, iqPoints: 2150, sessionScore: 0, roi: 0 },
   portfolio: {
     virtualBalance: 100000,
-    invested: 35450,
-    currentValue: 39680,
-    todayPnL: 320,
-    trades: [
-      { id: 1, date: '2024-02-15', time: '09:32', instrument: 'nifty50', type: 'BUY', qty: 2, price: 23100, total: 46200, pnl: 700, status: 'EXECUTED' },
-      { id: 2, date: '2024-02-16', time: '10:15', instrument: 'hdfcBank', type: 'BUY', qty: 5, price: 1690, total: 8450, pnl: 150, status: 'EXECUTED' },
-      { id: 3, date: '2024-02-18', time: '11:45', instrument: 'tataMotors', type: 'BUY', qty: 10, price: 870, total: 8700, pnl: 200, status: 'EXECUTED' },
-      { id: 4, date: '2024-02-20', time: '14:22', instrument: 'reliance', type: 'BUY', qty: 3, price: 2850, total: 8550, pnl: 120, status: 'EXECUTED' },
-      { id: 5, date: '2024-02-22', time: '09:55', instrument: 'nifty50', type: 'SELL', qty: 1, price: 23400, total: 23400, pnl: 300, status: 'EXECUTED' },
-    ],
-    positions: {
-      nifty50: { qty: 1, avgPrice: 23100, value: 23450 },
-      hdfcBank: { qty: 5, avgPrice: 1690, value: 8600 },
-      tataMotors: { qty: 10, avgPrice: 870, value: 8900 },
-      reliance: { qty: 3, avgPrice: 2850, value: 8670 },
-    },
+    invested: 0,
+    currentValue: 0,
+    todayPnL: 0,
+    trades: [],
+    positions: {},
   },
   learning: {
     currentLevel: 2,
@@ -58,9 +50,28 @@ const initialState = {
 };
 
 export function AppProvider({ children }) {
+  const { currentUser, userData } = useAuth() || {};
   const [state, setState] = useState(initialState);
+  
+  // Sync state with Firebase userData when available
+  useEffect(() => {
+    if (userData) {
+      setState(prev => ({
+        ...prev,
+        portfolio: {
+          ...prev.portfolio,
+          ...(userData.portfolio || {})
+        },
+        user: {
+           ...prev.user,
+           ...userData,
+           sessionScore: userData.sessionScore || 0
+        }
+      }));
+    }
+  }, [userData]);
 
-  // Price update every 30 seconds
+  // Price update / Live Market Simulation
   useEffect(() => {
     const interval = setInterval(() => {
       setState(prev => {
@@ -80,21 +91,32 @@ export function AppProvider({ children }) {
           }
         });
 
-        const todayPnL = Math.round((currentValue - prev.portfolio.invested) * 0.1 * 100) / 100;
+        const invested = prev.portfolio.invested;
+        const todayPnL = Math.round((currentValue - invested) * 0.1 * 100) / 100;
+        
+        // Basic ROI calculation: (currentValue - invested) / invested
+        let roi = 0;
+        if (invested > 0) {
+           roi = ((currentValue - invested) / invested) * 100;
+        }
 
         return {
           ...prev,
           prices: newPrices,
           portfolio: { ...prev.portfolio, currentValue: Math.round(currentValue), todayPnL, positions },
+          user: { ...prev.user, roi: Math.round(roi * 100) / 100 }
         };
       });
-    }, 30000);
+    }, 30000); // 30s update interval
     return () => clearInterval(interval);
   }, []);
 
-  const placeTrade = useCallback((instrument, type, qty) => {
+  const placeTrade = useCallback(async (instrument, type, qty) => {
+    let finalPortfolio = null;
+    let newSessionScore = 0;
+    
     setState(prev => {
-      const price = prev.prices[instrument];
+      const price = prev.prices[instrument] || INITIAL_PRICES[instrument];
       const total = Math.round(price * qty * 100) / 100;
       const newTrade = {
         id: prev.portfolio.trades.length + 1,
@@ -114,6 +136,10 @@ export function AppProvider({ children }) {
       const positions = { ...prev.portfolio.positions };
       
       if (type === 'BUY') {
+        if (newBalance < total) {
+          alert("Insufficient Virtual Balance!");
+          return prev;
+        }
         newBalance -= total;
         newInvested += total;
         if (positions[instrument]) {
@@ -128,8 +154,19 @@ export function AppProvider({ children }) {
           positions[instrument] = { qty, avgPrice: price, value: total };
         }
       } else {
+        if (!positions[instrument] || positions[instrument].qty < qty) {
+           alert("Not enough quantity to sell!");
+           return prev;
+        }
+        
         newBalance += total;
-        newInvested -= total;
+        const avgBuyPrice = positions[instrument].avgPrice;
+        const costBasis = avgBuyPrice * qty;
+        newInvested -= costBasis;
+        
+        // P&L calculation for the trade log
+        newTrade.pnl = Math.round((price - avgBuyPrice) * qty * 100) / 100;
+        
         if (positions[instrument]) {
           const newQty = positions[instrument].qty - qty;
           if (newQty <= 0) {
@@ -143,19 +180,43 @@ export function AppProvider({ children }) {
       let currentValue = 0;
       Object.values(positions).forEach(p => { currentValue += p.value; });
 
+      finalPortfolio = {
+        virtualBalance: Math.round(newBalance * 100) / 100,
+        invested: Math.round(newInvested * 100) / 100,
+        currentValue: Math.round(currentValue),
+        todayPnL: prev.portfolio.todayPnL,
+        trades: [newTrade, ...prev.portfolio.trades],
+        positions,
+      };
+
+      // Increase session score by 10 points for a successfully executed trade
+      newSessionScore = (prev.user.sessionScore || 0) + 10;
+
       return {
         ...prev,
-        portfolio: {
-          virtualBalance: Math.round(newBalance * 100) / 100,
-          invested: Math.round(newInvested * 100) / 100,
-          currentValue: Math.round(currentValue),
-          todayPnL: prev.portfolio.todayPnL,
-          trades: [newTrade, ...prev.portfolio.trades],
-          positions,
-        },
+        portfolio: finalPortfolio,
+        user: { ...prev.user, sessionScore: newSessionScore }
       };
     });
-  }, []);
+
+    // Sync to Firestore
+    if (currentUser) {
+        setTimeout(async () => {
+             try {
+                const userRef = doc(db, 'users', currentUser.uid);
+                // updating both portfolio and sessionScore
+                const updatePayload = {};
+                if (finalPortfolio) updatePayload.portfolio = finalPortfolio;
+                if (newSessionScore > 0) updatePayload.sessionScore = newSessionScore;
+                
+                await updateDoc(userRef, updatePayload);
+             } catch (e) {
+                 console.error("Failed to sync to Firestore", e);
+             }
+        }, 100);
+    }
+    
+  }, [currentUser]);
 
   const updateSettings = useCallback((updates) => {
     setState(prev => ({ ...prev, settings: { ...prev.settings, ...updates } }));
