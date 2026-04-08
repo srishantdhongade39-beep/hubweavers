@@ -107,7 +107,7 @@ export function AppProvider({ children }) {
           user: { ...prev.user, roi: Math.round(roi * 100) / 100 }
         };
       });
-    }, 30000); // 30s update interval
+    }, 15000); // 15s update interval
     return () => clearInterval(interval);
   }, []);
 
@@ -137,8 +137,7 @@ export function AppProvider({ children }) {
       
       if (type === 'BUY') {
         if (newBalance < total) {
-          alert("Insufficient Virtual Balance!");
-          return prev;
+          return prev; // insufficient balance — SimZone validates before calling
         }
         newBalance -= total;
         newInvested += total;
@@ -155,8 +154,7 @@ export function AppProvider({ children }) {
         }
       } else {
         if (!positions[instrument] || positions[instrument].qty < qty) {
-           alert("Not enough quantity to sell!");
-           return prev;
+           return prev; // no position — SimZone validates before calling
         }
         
         newBalance += total;

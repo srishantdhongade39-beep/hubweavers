@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart, Bar, ResponsiveContainer } from 'recharts';
 import { useApp } from '../context/AppContext';
 
 const INSTRUMENT_NAMES = { nifty50: 'Nifty 50 ETF', hdfcBank: 'HDFC Bank', reliance: 'Reliance Ind.', sbiNifty: 'SBI Nifty Index Fund', tataMotors: 'Tata Motors', goldETF: 'Gold ETF' };
@@ -12,8 +11,6 @@ const EXTRA_TRADES = [
   { id: 9, date: '2024-02-03', time: '11:22', instrument: 'hdfcBank', type: 'BUY', qty: 2, price: 1670, total: 3340, pnl: 100, status: 'EXECUTED' },
   { id: 10, date: '2024-01-30', time: '09:55', instrument: 'tataMotors', type: 'SELL', qty: 3, price: 875, total: 2625, pnl: 150, status: 'EXECUTED' },
 ];
-
-const BAR_DATA = Array.from({ length: 28 }, (_, i) => ({ day: i, trades: Math.floor(Math.random() * 5) }));
 
 export default function Track() {
   const navigate = useNavigate();
@@ -75,16 +72,6 @@ export default function Track() {
               <option value="SELL" className="text-black">SELL</option>
             </select>
             <span className="ml-auto text-xs font-mono" style={{ color: '#1D9E7560' }}>SYNC_STATUS: LIVE_MARKET_DB</span>
-          </div>
-
-          {/* Bar Chart */}
-          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: '#6B7280' }}>Trade Frequency (Daily)</p>
-          <div className="h-32 mb-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={BAR_DATA} barSize={6}>
-                <Bar dataKey="trades" fill="#1D9E75" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
 
           {/* Trade Log Table */}
