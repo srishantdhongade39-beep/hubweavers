@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const CONFETTI_COLORS = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#FF922B', '#CC5DE8', '#1D9E75', '#D4A017'];
 
@@ -41,6 +42,38 @@ function Confetti() {
 
 export default function LevelComplete() {
   const navigate = useNavigate();
+  const { userData, updateUserData } = useAuth();
+  const [claiming, setClaiming] = useState(false);
+
+  const handleClaimReward = async () => {
+    if (claiming) return;
+    setClaiming(true);
+
+    try {
+      // 1. Add XP to User Context/Firestore
+      if (userData && updateUserData) {
+        await updateUserData({
+          xp: (userData.xp || 0) + 450
+        });
+      }
+
+      // 2. Chapter progression tracking via LocalStorage for the mocked lesson page
+      const currentChapterStr = localStorage.getItem('lesson_active_idx');
+      if (currentChapterStr) {
+        let chapterIdx = parseInt(currentChapterStr, 10);
+        // Save the index that was just completed to be unlocked
+        localStorage.setItem('finiq_record_completion', chapterIdx.toString());
+      } else {
+        localStorage.setItem('finiq_record_completion', '1'); // Default fallback
+      }
+
+      // 3. Navigate back to lesson module
+      navigate('/learn/lesson');
+    } catch (e) {
+      console.error(e);
+      setClaiming(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#EDF4F2' }}>
@@ -84,11 +117,12 @@ export default function LevelComplete() {
             </p>
 
             <button
-              onClick={() => navigate('/learn')}
-              className="w-full py-3.5 rounded-xl text-white font-bold hover:opacity-90 transition-all mb-3"
+              onClick={handleClaimReward}
+              disabled={claiming}
+              className="w-full py-3.5 rounded-xl text-white font-bold hover:opacity-90 transition-all mb-3 disabled:opacity-50"
               style={{ backgroundColor: '#0D6B5B' }}
             >
-              Claim Rewards & Continue
+              {claiming ? 'Claiming...' : 'Claim Rewards & Continue'}
             </button>
             <button
               onClick={() => navigate('/track')}

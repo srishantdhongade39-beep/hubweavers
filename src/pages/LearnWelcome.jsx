@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LearningRoadmap from '../components/learn/LearningRoadmap';
+import ModuleCards from '../components/learn/ModuleCards';
+import StreakTracker from '../components/learn/StreakTracker';
+import QuizCTA from '../components/learn/QuizCTA';
+import LeaderboardTeaser from '../components/learn/LeaderboardTeaser';
 
 function AnimatedNumber({ target, label, duration = 1500 }) {
   const [val, setVal] = useState(0);
@@ -33,11 +38,12 @@ export default function LearnWelcome() {
 
   useEffect(() => {
     setTimeout(() => setProgressWidth(30), 100);
-    setTimeout(() => setKnowledgeWidth(65), 300);
+    // Setting knowledge width strictly to 0 for a brand new user
+    setTimeout(() => setKnowledgeWidth(0), 300);
   }, []);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#EDF4F2' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#eaf5f0' }}>
       {/* Top progress bar */}
       <div className="fixed top-16 left-0 right-0 h-1 bg-gray-200 z-40">
         <div
@@ -47,7 +53,7 @@ export default function LearnWelcome() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 pt-28 pb-16">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-12 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-12 items-center mb-16">
           {/* Left 60% */}
           <div className="md:col-span-3 animate-fade-in">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6" style={{ backgroundColor: '#E6F7F2' }}>
@@ -102,19 +108,23 @@ export default function LearnWelcome() {
                 </div>
               </div>
 
-              <h3 className="text-2xl font-extrabold mb-1" style={{ color: '#1A1A2E' }}>Intermediate</h3>
-              <p className="text-sm text-gray-500 mb-4">Tier 3 Investor</p>
-              
-              <hr className="mb-4" />
-
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#0D6B5B' }}>AK</div>
-                <div>
-                  <div className="text-xs uppercase text-gray-400">Your Mentor</div>
-                  <div className="font-bold text-sm" style={{ color: '#1A1A2E' }}>Arjun K.</div>
-                </div>
-              </div>
+              <h3 className="text-2xl font-extrabold mb-1" style={{ color: '#1A1A2E' }}>Novice</h3>
+              <p className="text-sm text-gray-500 mb-4">Tier 1 Investor</p>
             </div>
+          </div>
+        </div>
+
+        {/* --- NEW LEARN DASHBOARD SECTION --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in" style={{ animationDelay: '200ms', animationFillMode: 'both' }}>
+          <div className="lg:col-span-2">
+            <StreakTracker />
+            <ModuleCards />
+            <LearningRoadmap />
+          </div>
+
+          <div className="space-y-6">
+            <QuizCTA />
+            <LeaderboardTeaser />
           </div>
         </div>
       </div>
