@@ -19,8 +19,11 @@ const KEY_TERMS = [
 export default function LearnLesson() {
   const navigate = useNavigate();
 
+  const savedMod = localStorage.getItem('finiq_active_module');
+  const currentModule = savedMod ? JSON.parse(savedMod) : { id: 1, title: 'Understanding SIPs' };
+
   const [chapters, setChapters] = useState(() => {
-    const saved = localStorage.getItem('finiq_lesson_chapters');
+    const saved = localStorage.getItem(`finiq_module_${currentModule.id}_chapters`);
     return saved ? JSON.parse(saved) : INITIAL_CHAPTERS;
   });
 
@@ -28,9 +31,9 @@ export default function LearnLesson() {
   const [activeChapter, setActiveChapter] = useState(initialIdx === -1 ? 0 : initialIdx);
 
   useEffect(() => {
-    localStorage.setItem('finiq_lesson_chapters', JSON.stringify(chapters));
+    localStorage.setItem(`finiq_module_${currentModule.id}_chapters`, JSON.stringify(chapters));
     localStorage.setItem('lesson_active_idx', activeChapter.toString());
-  }, [chapters, activeChapter]);
+  }, [chapters, activeChapter, currentModule.id]);
 
   useEffect(() => {
     // Check if we just claimed a reward from LevelComplete screen
@@ -56,6 +59,11 @@ export default function LearnLesson() {
 
   const completedCount = chapters.filter(c => c.status === 'completed').length;
   const progressRatio = Math.min(100, Math.round((completedCount / chapters.length) * 100));
+
+  // Sync module progress back globally so ModuleCards picks it up
+  useEffect(() => {
+    localStorage.setItem(`finiq_module_${currentModule.id}_progress`, progressRatio.toString());
+  }, [progressRatio, currentModule.id]);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#EDF4F2' }}>
@@ -110,7 +118,7 @@ export default function LearnLesson() {
           <div className="lg:col-span-9">
             <div className="bg-white rounded-2xl p-8 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
-                <span className="px-3 py-1 rounded-full text-xs font-semibold text-white truncate max-w-40" style={{ backgroundColor: '#0D6B5B' }}>{chapters[activeChapter]?.title}</span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold text-white truncate max-w-[250px]" style={{ backgroundColor: '#0D6B5B' }}>{currentModule.title}</span>
                 <span className="text-xs text-gray-500">Lesson {activeChapter + 1} of {chapters.length}</span>
               </div>
 

@@ -70,11 +70,6 @@ export default function Navbar() {
         <div className="flex items-center gap-3">
           {currentUser ? (
             <div className="flex items-center gap-4 relative">
-              <div className="flex items-center gap-1 text-sm bg-orange-50 px-3 py-1 rounded-full border border-orange-100" title="Daily Streak">
-                <span>🔥</span>
-                <span className="font-bold text-orange-600">{userData?.streakCount || 0}</span>
-              </div>
-              
               <div className="relative">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
