@@ -76,9 +76,6 @@ npm run dev
 ## 👥 Team
 Built by **Hubweavers**
 
-- srishantdhongade39-beep
-- nishalinid11-boop
-
 ---
 
 ## 📄 License
